@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediBot - Your AI Health Assistant</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="../static/style.css"/>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-card">
+            <div class="chat-header">
+                <div class="connection-status">
+                    <div class="status-dot"></div>
+                    <span>Online</span>
+                </div>
+                <div class="bot-info">
+                    <div class="bot-avatar">
+                        <img src="https://cdn-icons-png.flaticon.com/512/387/387569.png" class="bot-avatar-img">
+                        <div class="online-indicator"></div>
+                    </div>
+                    <div class="bot-details">
+                        <h4>MediBot</h4>
+                        <p>Your AI Health Assistant - Available 24/7</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="header-btn" title="Clear conversation" onclick="clearConversation()">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                    <button class="header-btn" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <div class="welcome-icon">
+                        <img src="https://cdn-icons-png.flaticon.com/512/387/387569.png" alt="MediBot">
+                    </div>
+                    <div class="welcome-title">Hello! I'm MediBot</div>
+                    <div class="welcome-subtitle">Ask me about symptoms, medications, or general health questions</div>
+                    <div class="suggestion-chips">
+                        <div class="suggestion-chip" onclick="sendSuggestion('What are the symptoms of flu?')">Flu symptoms</div>
+                        <div class="suggestion-chip" onclick="sendSuggestion('How to manage diabetes?')">Diabetes care</div>
+                        <div class="suggestion-chip" onclick="sendSuggestion('Healthy diet tips')">Diet tips</div>
+                        <div class="suggestion-chip" onclick="sendSuggestion('Exercise recommendations')">Exercise guide</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <form id="messageForm">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="messageInput" 
+                            class="chat-input" 
+                            placeholder="Ask about symptoms, medications, or health concerns..."
+                            rows="1"
+                            maxlength="1000"
+                        ></textarea>
+                        <button type="submit" class="send-button" id="sendButton">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </form>
+                <div class="error-state" id="errorMessage">
+                    Failed to send message. Please try again.
+                </div>
+            </div>
+
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="loading-spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        let isFirstMessage = true;
+        
+        // Auto-resize textarea
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        // Initialize
+        $(document).ready(function() {
+            const messageInput = document.getElementById('messageInput');
+            const chatMessages = document.getElementById('chatMessages');
+            const sendButton = document.getElementById('sendButton');
+            const errorMessage = document.getElementById('errorMessage');
+
+            // Auto-resize textarea
+            messageInput.addEventListener('input', function() {
+                autoResize(this);
+                updateSendButtonState();
+            });
+
+            // Enter to send (Shift+Enter for new line)
+            messageInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (this.value.trim()) {
+                        document.getElementById('messageForm').dispatchEvent(new Event('submit'));
+                    }
+                }
+            });
+
+            function updateSendButtonState() {
+                const hasText = messageInput.value.trim().length > 0;
+                sendButton.style.opacity = hasText ? '1' : '0.7';
+                sendButton.style.transform = hasText ? 'translateY(-50%) scale(1.05)' : 'translateY(-50%) scale(1)';
+            }
+
+            function hideWelcomeMessage() {
+                if (isFirstMessage) {
+                    $('.welcome-message').fadeOut(300);
+                    isFirstMessage = false;
+                }
+            }
+
+            function showTypingIndicator() {
+                const typingHtml = `
+                    <div class="message bot-message typing-indicator" id="typingIndicator">
+                        <div class="message-avatar">
+                            <img src="https://cdn-icons-png.flaticon.com/512/387/387569.png" class="message-avatar-img">
+                        </div>
+                        <div class="typing-dots">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                    </div>
+                `;
+                chatMessages.insertAdjacentHTML('beforeend', typingHtml);
+                document.getElementById('typingIndicator').style.display = 'flex';
+                scrollToBottom();
+            }
+
+            function hideTypingIndicator() {
+                const typingIndicator = document.getElementById('typingIndicator');
+                if (typingIndicator) {
+                    typingIndicator.remove();
+                }
+            }
+
+            function scrollToBottom() {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function getCurrentTime() {
+                const now = new Date();
+                return now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
+
+            function addMessage(text, isUser = false) {
+                hideWelcomeMessage();
+                
+                const time = getCurrentTime();
+                const messageClass = isUser ? 'user-message' : 'bot-message';
+                const avatarImg = isUser ? 
+                    'https://i.ibb.co/d5b84Xw/Untitled-design.png' : 
+                    'https://cdn-icons-png.flaticon.com/512/387/387569.png';
+                
+                const messageHtml = `
+                    <div class="message ${messageClass} fade-in">
+                        ${isUser ? '' : `
+                            <div class="message-avatar">
+                                <img src="${avatarImg}" class="message-avatar-img">
+                            </div>
+                        `}
+                        <div class="message-content">
+                            <div class="message-bubble">${text}</div>
+                            <div class="message-time">${time}</div>
+                            ${!isUser ? `
+                                <div class="message-actions">
+                                    <button class="action-btn" onclick="copyMessage(this)">
+                                        <i class="fas fa-copy"></i> Copy
+                                    </button>
+                                    <button class="action-btn" onclick="likeMessage(this)">
+                                        <i class="fas fa-thumbs-up"></i> Helpful
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                        ${isUser ? `
+                            <div class="message-avatar">
+                                <img src="${avatarImg}" class="message-avatar-img">
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                chatMessages.insertAdjacentHTML('beforeend', messageHtml);
+                scrollToBottom();
+            }
+
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+                setTimeout(() => {
+                    errorMessage.style.display = 'none';
+                }, 5000);
+            }
+
+            // Form submission
+            $("#messageForm").on("submit", function(event) {
+                event.preventDefault();
+                
+                const rawText = messageInput.value.trim();
+                if (!rawText) return;
+
+                // Add user message
+                addMessage(rawText, true);
+                
+                // Clear input
+                messageInput.value = "";
+                autoResize(messageInput);
+                updateSendButtonState();
+
+                // Show typing indicator
+                showTypingIndicator();
+
+                // AJAX call to your backend
+                $.ajax({
+                    data: { msg: rawText },
+                    type: "POST",
+                    url: "/get",
+                    timeout: 30000
+                })
+                .done(function(data) {
+                    hideTypingIndicator();
+                    addMessage(data);
+                })
+                .fail(function(xhr, status, error) {
+                    hideTypingIndicator();
+                    let errorMsg = "Sorry, I'm having trouble connecting. Please try again.";
+                    
+                    if (status === 'timeout') {
+                        errorMsg = "Request timed out. Please try again.";
+                    } else if (xhr.status === 500) {
+                        errorMsg = "Server error. Please try again later.";
+                    }
+                    
+                    addMessage(errorMsg);
+                    showError(errorMsg);
+                });
+            });
+
+            updateSendButtonState();
+        });
+
+        // Global functions
+        function sendSuggestion(text) {
+            document.getElementById('messageInput').value = text;
+            document.getElementById('messageForm').dispatchEvent(new Event('submit'));
+        }
+
+        function copyMessage(button) {
+            const messageText = button.closest('.message-content').querySelector('.message-bubble').textContent;
+            navigator.clipboard.writeText(messageText).then(() => {
+                button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                setTimeout(() => {
+                    button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+                }, 2000);
+            });
+        }
+
+        function likeMessage(button) {
+            button.innerHTML = '<i class="fas fa-heart" style="color: #e53e3e;"></i> Thanks!';
+            button.disabled = true;
+        }
+
+        function clearConversation() {
+            if (confirm('Are you sure you want to clear this conversation?')) {
+                document.getElementById('chatMessages').innerHTML = `
+                    <div class="welcome-message">
+                        <div class="welcome-icon">
+                            <img src="https://cdn-icons-png.flaticon.com/512/387/387569.png" alt="MediBot">
+                        </div>
+                        <div class="welcome-title">Hello! I'm MediBot</div>
+                        <div class="welcome-subtitle">Ask me about symptoms, medications, or general health questions</div>
+                        <div class="suggestion-chips">
+                            <div class="suggestion-chip" onclick="sendSuggestion('What are the symptoms of flu?')">Flu symptoms</div>
+                            <div class="suggestion-chip" onclick="sendSuggestion('How to manage diabetes?')">Diabetes care</div>
+                            <div class="suggestion-chip" onclick="sendSuggestion('Healthy diet tips')">Diet tips</div>
+                            <div class="suggestion-chip" onclick="sendSuggestion('Exercise recommendations')">Exercise guide</div>
+                        </div>
+                    </div>
+                `;
+                isFirstMessage = true;
+            }
+        }
+
+        // Focus input on page load
+        window.addEventListener('load', function() {
+            document.getElementById('messageInput').focus();
+        });
+    </script>
+</body>
+</html>
